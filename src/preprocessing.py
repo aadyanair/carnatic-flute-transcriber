@@ -1,3 +1,4 @@
+import csv
 import librosa
 import soundfile as sf
 from pathlib import Path
@@ -33,8 +34,9 @@ def preprocess_audio(input_path, output_path):
     )
 
     processed_duration = len(audio_trimmed) / sr
+    removed_duration = original_duration - processed_duration
 
-    # Create output directory if it doesn't exist
+    # Create output directory
     Path(output_path).parent.mkdir(
         parents=True,
         exist_ok=True
@@ -50,11 +52,23 @@ def preprocess_audio(input_path, output_path):
     print(f"  Sample rate : {sr} Hz")
     print(f"  Original    : {original_duration:.2f} sec")
     print(f"  Processed   : {processed_duration:.2f} sec")
-    print(f"  Removed     : {original_duration - processed_duration:.2f} sec")
+    print(f"  Removed     : {removed_duration:.2f} sec")
     print(f"  Saved to    : {output_path}")
 
+    return {
+        "sample_rate": sr,
+        "original_duration": original_duration,
+        "processed_duration": processed_duration,
+        "removed_duration": removed_duration
+    }
 
-def process_directory(input_directory, output_directory):
+
+def process_directory(
+    input_directory,
+    output_directory,
+    category,
+    metadata
+):
     input_directory = Path(input_directory)
     output_directory = Path(output_directory)
 
@@ -71,26 +85,68 @@ def process_directory(input_directory, output_directory):
         print(f"No audio files found in {input_directory}")
         return
 
-    print(f"\nFound {len(audio_files)} audio file(s) in {input_directory}")
+    print(
+        f"\nFound {len(audio_files)} audio file(s) "
+        f"in {input_directory}"
+    )
 
     for input_file in audio_files:
 
         output_file = output_directory / f"{input_file.stem}.wav"
 
-        preprocess_audio(
+        stats = preprocess_audio(
             input_file,
             output_file
         )
 
+        metadata.append({
+            "file": input_file.name,
+            "category": category,
+            **stats
+        })
+
+
+def save_metadata(metadata, output_path):
+    fieldnames = [
+        "file",
+        "category",
+        "sample_rate",
+        "original_duration",
+        "processed_duration",
+        "removed_duration"
+    ]
+
+    with open(output_path, "w", newline="") as file:
+        writer = csv.DictWriter(
+            file,
+            fieldnames=fieldnames
+        )
+
+        writer.writeheader()
+        writer.writerows(metadata)
+
+    print(f"\nMetadata saved to: {output_path}")
+
 
 if __name__ == "__main__":
 
+    metadata = []
+
     process_directory(
         "data/raw/carnatic",
-        "data/processed/carnatic"
+        "data/processed/carnatic",
+        "carnatic",
+        metadata
     )
 
     process_directory(
         "data/raw/other",
-        "data/processed/other"
+        "data/processed/other",
+        "other",
+        metadata
+    )
+
+    save_metadata(
+        metadata,
+        "data/metadata.csv"
     )
